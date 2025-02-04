@@ -14,12 +14,15 @@ const USER_COLLECTION_SCHEMA = Joi.object({
     userID: Joi.string().required().min(6).max(30).trim().strict(),
     password: Joi.string().required().min(8).trim().strict(),
     confirmPassword: Joi.string().required().valid(Joi.ref('password')).strict(),
+    sharedPosts: Joi.array().items(Joi.string().pattern(OBJECT_ID_RULE)).default([]),
+    //userCollectionID:Joi.string(),
     admin: Joi.boolean().default(false),
     slug: Joi.string().required().trim().strict(),
     
     createdAt: Joi.date().timestamp('javascript').default(Date.now),
     updatedAt: Joi.date().timestamp('javascript').default(null),
-    _destroy: Joi.boolean().default(false)
+    _destroy: Joi.boolean().default(false),
+    savedPosts: Joi.array().items(Joi.string().pattern(OBJECT_ID_RULE)).default([]),
 })
 
 const validateBeforeCreate = async (data) => {
@@ -34,8 +37,14 @@ const createNew = async (data) => {
         const validData = await validateBeforeCreate(data)
         validData.password = await bcrypt.hash(validData.password, 10)
         delete validData.confirmPassword
+        
+        //chuyển _id thành ObjectId rồi gán vô userId để sài
+        const userId = new ObjectId();
+        validData._id = userId;
+        //validData.userCollectionID = userId;
 
-        console.log('validData: ', validData)
+
+        //console.log('validData: ', validData) //log ra validData(để debug)
         const createdUser = await GET_DB().collection(USER_COLLECTION_NAME).insertOne(validData)
 
         return createdUser
@@ -84,6 +93,73 @@ const getDetails = async (id) => {
     }
 }
 
+const updatePassword = async (userId, hashedPassword) => {
+    try {
+        const result = await GET_DB()
+            .collection(USER_COLLECTION_NAME)
+            .updateOne(
+                { _id: new ObjectId(userId) }, // Chuyển đổi userId thành ObjectId
+            {
+                $set: {
+                password: hashedPassword,
+                updatedAt: new Date().getTime(), // Cập nhật thời gian sửa đổi
+                },
+            }
+            );
+
+        if (!result.acknowledged) {
+            throw new Error('Update password failed');
+        }
+
+        return result;
+    } catch (error) {
+        throw error;
+    }
+};
+
+const updateSharedPosts = async (userId, boardId) => {
+    try {
+        const result = await GET_DB()
+            .collection(USER_COLLECTION_NAME)
+            .updateOne(
+                { _id: new ObjectId(userId) },
+                {
+                    $addToSet: { sharedPosts: new ObjectId(boardId) },
+                    $set: { updatedAt: new Date().getTime() }
+                }
+            );
+
+        if (!result.acknowledged) {
+            throw new Error('Update shared posts failed');
+        }
+
+        return result;
+    } catch (error) {
+        throw error;
+    }
+};
+
+const updateSavedPosts = async (userId, boardId) => {
+    try {
+        const result = await GET_DB()
+            .collection(USER_COLLECTION_NAME)
+            .updateOne(
+                { _id: new ObjectId(userId) },
+                {
+                    $addToSet: { savedPosts: new ObjectId(boardId) },
+                    $set: { updatedAt: new Date().getTime() }
+                }
+            );
+
+        if (!result.acknowledged) {
+            throw new Error('Update saved posts failed');
+        }
+
+        return result;
+    } catch (error) {
+        throw error;
+    }
+};
 
 export const AuthModel = {
     USER_COLLECTION_NAME,
@@ -93,4 +169,7 @@ export const AuthModel = {
     getDetails,
     validateBeforeCreate,
     findOne,
+    updatePassword,
+    updateSharedPosts,
+    updateSavedPosts,
 }
